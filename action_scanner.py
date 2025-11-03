@@ -16,8 +16,8 @@ except ImportError:
 # ---
 # --- 2. CONFIGURATION ---
 # ---
-MODEL_PATH = r"C:\Users\lenovo\Downloads\BTP\my_model\my_model.pt"        # <-- SET PATH to your YOLO model
-INVENTORY_FILE_PATH = r"C:\Users\lenovo\Downloads\BTP\inventory.json"      # <-- SET PATH for your inventory file
+MODEL_PATH = r"C:\Users\suran\OneDrive\Desktop\VScode_WorkSpaces\Intermediate_WS_projects\BTP1\my_model\my_model.pt"        # <-- SET PATH to your YOLO model
+INVENTORY_FILE_PATH = r"C:\Users\suran\OneDrive\Desktop\VScode_WorkSpaces\Intermediate_WS_projects\BTP1\inventory.json"      # <-- SET PATH for your inventory file
 WEBCAM_ID = 0                                      # <-- 0 is usually the default webcam
 CONFIDENCE_THRESHOLD = 0.5                         # <-- Adjust as needed
 SCAN_DURATION_SEC = 10                             # <-- Duration of the scan window
