@@ -1,7 +1,57 @@
 import cv2
 import time
 import json
+import sys
+import threading
+import io
+import socketserver
+import http.server
 from ultralytics import YOLO
+
+# --- MJPEG server globals (populated if --mjpeg-port is passed) ---
+_latest_jpeg = None
+_latest_jpeg_lock = threading.Lock()
+
+
+class _MJPEGHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != '/stream':
+            self.send_error(404)
+            return
+
+        self.send_response(200)
+        self.send_header('Content-type', 'multipart/x-mixed-replace; boundary=FRAME')
+        self.end_headers()
+
+        try:
+            while True:
+                with _latest_jpeg_lock:
+                    frame = _latest_jpeg
+                if frame is None:
+                    time.sleep(0.05)
+                    continue
+
+                self.wfile.write(b"--FRAME\r\n")
+                self.wfile.write(b"Content-Type: image/jpeg\r\n\r\n")
+                self.wfile.write(frame)
+                self.wfile.write(b"\r\n")
+                self.wfile.flush()
+                time.sleep(0.05)
+        except Exception:
+            # client disconnected
+            return
+
+
+class _ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
+
+def _start_mjpeg_server(port: int):
+    server = _ThreadingHTTPServer(('0.0.0.0', port), _MJPEGHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    print(f"MJPEG stream available at http://localhost:{port}/stream")
+    return server
 
 # ---
 # --- 1. IMPORT YOUR LOGIC MODULE ---
@@ -148,9 +198,22 @@ def main():
                 scan_start_time = None
 
         # ---
-        # Display the final composed frame
+        # Display / stream the final composed frame
         # ---
-        cv2.imshow("Action Scanner (Press 'q' to quit)", display_frame)
+        # If MJPEG streaming is enabled, push JPEG frames into the buffer
+        if '--mjpeg-port' in sys.argv:
+            # encode to JPEG and update global
+            try:
+                ret, jpg = cv2.imencode('.jpg', display_frame)
+                if ret:
+                    with _latest_jpeg_lock:
+                        # store raw bytes
+                        global _latest_jpeg
+                        _latest_jpeg = jpg.tobytes()
+            except Exception:
+                pass
+        else:
+            cv2.imshow("Action Scanner (Press 'q' to quit)", display_frame)
 
     # 5. Cleanup
     print("\n" + "="*40)
@@ -163,4 +226,19 @@ def main():
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    # Optional CLI: --mjpeg-port PORT
+    mjpeg_server = None
+    port = None
+    if '--mjpeg-port' in sys.argv:
+        try:
+            idx = sys.argv.index('--mjpeg-port')
+            port = int(sys.argv[idx + 1])
+            mjpeg_server = _start_mjpeg_server(port)
+        except Exception as e:
+            print(f"Failed to start MJPEG server: {e}")
+
+    try:
+        main()
+    finally:
+        if mjpeg_server is not None:
+            mjpeg_server.shutdown()

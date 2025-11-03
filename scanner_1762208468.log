@@ -1,0 +1,29 @@
+127.0.0.1 - - [04/Nov/2025 03:51:12] "GET /control?cmd=ping HTTP/1.1" 200 -
+127.0.0.1 - - [04/Nov/2025 03:51:12] "GET /stream HTTP/1.1" 200 -
+MJPEG stream available at http://localhost:8082/stream
+========================================
+STARTING ACTION SCANNER
+Press 's' to start a 10-second scan.
+Press 'q' in the video window to quit.
+========================================
+Loading YOLO model from C:\Users\suran\OneDrive\Desktop\VScode_WorkSpaces\Intermediate_WS_projects\BTP1\my_model\my_model.pt...
+Loading inventory from C:\Users\suran\OneDrive\Desktop\VScode_WorkSpaces\Intermediate_WS_projects\BTP1\inventory.json...
+
+--- CURRENT INVENTORY ---
+{
+  "snickers": 505,
+  "gummy_worms": 50,
+  "airheads": 49,
+  "three_musketeers": 50,
+  "twizzlers": 47,
+  "starbust": 50,
+  "MMs_peanut": 50
+}
+========================================
+Traceback (most recent call last):
+  File "C:\Users\suran\OneDrive\Desktop\VScode_WorkSpaces\Intermediate_WS_projects\BTP1\action_scanner.py", line 299, in <module>
+    main()
+  File "C:\Users\suran\OneDrive\Desktop\VScode_WorkSpaces\Intermediate_WS_projects\BTP1\action_scanner.py", line 164, in main
+    cmd = _control_command
+          ^^^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable '_control_command' where it is not associated with a value

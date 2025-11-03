@@ -1,10 +1,14 @@
 import streamlit as st
 from pathlib import Path
+import subprocess
+import sys
+import time
 
 st.set_page_config(page_title="Inventory Viewer", layout="centered")
 
 st.title("Inventory")
 
+# --- Inventory loader/saver ---
 try:
     import inventory_logic as logic
 except Exception as e:
@@ -32,7 +36,6 @@ st.subheader("Current inventory (editable)")
 
 # Use experimental data editor if available for a nicer edit experience
 try:
-    # convert to list of dicts for editor
     rows = [{"item": k, "count": int(v)} for k, v in inventory.items()]
     edited = st.experimental_data_editor(rows, num_rows="dynamic")
     if st.button("Save changes"):
@@ -60,5 +63,56 @@ except Exception:
         else:
             st.warning("Enter item name")
 
+# --- CLI scanner controls (runs action_scanner.py) ---
 st.markdown("---")
-st.caption("This page only displays and edits the inventory JSON. Camera and model features removed.")
+st.subheader("Run CLI scanner")
+
+if 'scanner_proc' not in st.session_state:
+    st.session_state['scanner_proc'] = None
+
+repo_root = Path(__file__).parent
+use_mjpeg = st.checkbox("Embed CLI camera output in page (MJPEG)", value=True)
+mjpeg_port = st.number_input("MJPEG port", min_value=1024, max_value=65535, value=8082)
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("Start CLI scanner"):
+        if st.session_state.get('scanner_proc') is None:
+            try:
+                cmd = [sys.executable, str(repo_root / 'action_scanner.py')]
+                if use_mjpeg:
+                    cmd += ['--mjpeg-port', str(mjpeg_port)]
+                proc = subprocess.Popen(cmd, cwd=str(repo_root))
+                st.session_state['scanner_proc'] = proc
+                st.success(f"Started action_scanner.py (pid={proc.pid})")
+            except Exception as e:
+                st.error(f"Failed to start action_scanner: {e}")
+        else:
+            st.info("CLI scanner already running.")
+with col2:
+    if st.button("Stop CLI scanner"):
+        proc = st.session_state.get('scanner_proc')
+        if proc is not None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+                st.success(f"Stopped action_scanner.py (pid={proc.pid})")
+            except Exception as e:
+                try:
+                    proc.kill()
+                    st.success(f"Killed action_scanner.py (pid={proc.pid})")
+                except Exception as ee:
+                    st.error(f"Failed to stop process: {e}; {ee}")
+            finally:
+                st.session_state['scanner_proc'] = None
+        else:
+            st.info("No CLI scanner process found.")
+
+# Embed MJPEG stream if requested and process is running
+proc = st.session_state.get('scanner_proc')
+if proc is not None and use_mjpeg:
+    stream_url = f"http://localhost:{mjpeg_port}/stream"
+    st.markdown("---")
+    st.subheader("CLI camera stream")
+    st.markdown(f'<img src="{stream_url}" width="640" />', unsafe_allow_html=True)
+
+st.caption("This page displays and edits the inventory JSON. Use the CLI controls below to run the original scanner.")
