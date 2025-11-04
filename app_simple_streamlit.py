@@ -81,7 +81,16 @@ with col1:
                 cmd = [sys.executable, str(repo_root / 'action_scanner.py')]
                 if use_mjpeg:
                     cmd += ['--mjpeg-port', str(mjpeg_port)]
-                proc = subprocess.Popen(cmd, cwd=str(repo_root))
+                # open the subprocess with a piped stdin so we can programmatically
+                # send the same 's' key that the CLI expects
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(repo_root),
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
                 st.session_state['scanner_proc'] = proc
                 st.success(f"Started action_scanner.py (pid={proc.pid})")
             except Exception as e:
@@ -93,6 +102,13 @@ with col2:
         proc = st.session_state.get('scanner_proc')
         if proc is not None:
             try:
+                # close stdin to signal EOF to the child (if it cares)
+                try:
+                    if proc.stdin:
+                        proc.stdin.close()
+                except Exception:
+                    pass
+
                 proc.terminate()
                 proc.wait(timeout=5)
                 st.success(f"Stopped action_scanner.py (pid={proc.pid})")
@@ -114,5 +130,50 @@ if proc is not None and use_mjpeg:
     st.markdown("---")
     st.subheader("CLI camera stream")
     st.markdown(f'<img src="{stream_url}" width="640" />', unsafe_allow_html=True)
+
+# Trigger a scan by sending 's' to the subprocess stdin (if available)
+st.markdown("---")
+st.subheader("Remote trigger")
+if st.button("Trigger scan ('s')"):
+    proc = st.session_state.get('scanner_proc')
+    if proc is None:
+        st.warning("No scanner process running. Start the CLI scanner first.")
+    else:
+        # If MJPEG is enabled, prefer the HTTP trigger endpoint exposed by the scanner
+        if use_mjpeg:
+            try:
+                import http.client
+                conn = http.client.HTTPConnection('localhost', mjpeg_port, timeout=2)
+                conn.request('GET', '/trigger')
+                resp = conn.getresponse()
+                body = resp.read().decode('utf-8', errors='ignore')
+                if resp.status == 200:
+                    st.success("Triggered scanner via HTTP endpoint.")
+                else:
+                    st.error(f"Trigger endpoint returned status {resp.status}: {body}")
+                conn.close()
+            except Exception as e:
+                st.warning(f"HTTP trigger failed: {e}. Falling back to stdin.")
+                # fallback to stdin write below
+                try:
+                    if proc.stdin is None:
+                        st.error("Scanner stdin is not available. Could not trigger.")
+                    else:
+                        proc.stdin.write('s\n')
+                        proc.stdin.flush()
+                        st.info("Sent 's' to scanner process stdin as fallback.")
+                except Exception as e2:
+                    st.error(f"Fallback stdin trigger failed: {e2}")
+        else:
+            # MJPEG not enabled; try stdin
+            if proc.stdin is None:
+                st.error("Scanner stdin is not available. It may not accept programmatic input.")
+            else:
+                try:
+                    proc.stdin.write('s\n')
+                    proc.stdin.flush()
+                    st.info("Sent 's' to scanner process stdin.")
+                except Exception as e:
+                    st.error(f"Failed to send input to scanner: {e}")
 
 st.caption("This page displays and edits the inventory JSON. Use the CLI controls below to run the original scanner.")

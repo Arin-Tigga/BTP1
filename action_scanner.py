@@ -11,10 +11,25 @@ from ultralytics import YOLO
 # --- MJPEG server globals (populated if --mjpeg-port is passed) ---
 _latest_jpeg = None
 _latest_jpeg_lock = threading.Lock()
+# Event used to trigger a scan remotely (via MJPEG server /trigger)
+_scan_request_event = threading.Event()
 
 
 class _MJPEGHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        # Provide a simple trigger endpoint in addition to /stream
+        if self.path == '/trigger':
+            try:
+                # set event to notify main loop to start a scan
+                _scan_request_event.set()
+                self.send_response(200)
+                self.send_header('Content-type', 'text/plain')
+                self.end_headers()
+                self.wfile.write(b"Triggered")
+            except Exception:
+                self.send_error(500)
+            return
+
         if self.path != '/stream':
             self.send_error(404)
             return
@@ -121,6 +136,16 @@ def main():
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
+
+        # Remote trigger via MJPEG server (/trigger) - event is set from HTTP handler
+        if _scan_request_event.is_set() and current_state == "idle":
+            _scan_request_event.clear()
+            print("\n" + "="*20)
+            print(f"STARTING {SCAN_DURATION_SEC}-SECOND SCAN... (remote trigger)")
+            current_state = "scanning"
+            scan_start_time = time.time()
+            initial_frame = frame.copy()
+            print("  'Initial' frame captured (remote).")
         elif key == ord('s') and current_state == "idle":
             print("\n" + "="*20)
             print(f"STARTING {SCAN_DURATION_SEC}-SECOND SCAN...")
